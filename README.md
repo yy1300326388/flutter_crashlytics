@@ -4,9 +4,16 @@ Flutter plugin to enable Crashlytics reporting.
 
 ## Setup
 
+### Firebase Crashlytics
+
+If using Firebase instead of Fabric, you must first setup your app to use firebase as per this tutorial
+https://codelabs.developers.google.com/codelabs/flutter-firebase/#4
+
+The instructions are the same for Fabric and Firebase, except that for Firebase, you do not get an Api key so you do not have to add it anywhere.
+
 ### Android
 To setup Crashlytics on Android side, you need to set under your manifest the Fabric ID like: 
-
+(Only do this if using Fabric, not firebase as you will not have an Api Key)
 ```
  <meta-data
             android:name="io.fabric.ApiKey"
@@ -35,7 +42,7 @@ Nothing more.
 
 ### iOS
 On iOS side your need to set your Fabric ID under your Info.plist like: 
-
+(Only do this if using Fabric, not firebase as you will not have an Api Key)
 ```
 <key>Fabric</key>
     <dict>
@@ -53,28 +60,62 @@ On iOS side your need to set your Fabric ID under your Info.plist like:
     </dict>
 ```
 
+Turn off automatic collection with a new key to your Info.plist file (GDPR compliency if you want it):
+
+Key: firebase_crashlytics_collection_enabled
+
+Value: false
+
+
 Then on your Podfile add `use_frameworks!`
 
-Don't forget to add your `Run Script` step on the build phases tab: 
+Don't forget to add your `Run Script` step (with any version of Xcode) on the build phases tab and, if using `Xcode 10`, only then must you add your app's built Info.plist location to the Build Phase's Input Files field:
+```
+$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)
+```
+
 ![ios run script](https://github.com/kiwi-bop/flutter_crashlytics/raw/master/iosScript.jpg "ios run script") 
+
 
 That's it :)
 
 ### Flutter 
 All you need to do under your code is to let the plugin handle the Flutter crashes.
 
-Under your `main` method, add:
+Your `main` method should look like:
 
 ```
-FlutterError.onError = (FlutterErrorDetails details) async {
-    await FlutterCrashlytics().onError(details, forceCrash: true);
+void main() async {
+  bool isInDebugMode = false;
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    if (isInDebugMode) {
+      // In development mode simply print to console.
+      FlutterError.dumpErrorToConsole(details);
+    } else {
+      // In production mode report to the application zone to report to
+      // Crashlytics.
+      Zone.current.handleUncaughtError(details.exception, details.stack);
+    }
   };
+
+  await FlutterCrashlytics().initialize();
+
+  runZoned<Future<Null>>(() async {
+    runApp(MyApp());
+  }, onError: (error, stackTrace) async {
+    // Whenever an error occurs, call the `reportCrash` function. This will send
+    // Dart errors to our dev console or Crashlytics depending on the environment.
+    await FlutterCrashlytics().reportCrash(error, stackTrace, forceCrash: false);
+  });
+}
 ```
 
 `forceCrash` allow you to have a real crash instead of the red screen, in that case the exception will tagged as fatal 
 
 ## API available
 - Add log to crash reporting with `log(String msg, {int priority, String tag})`
+- Add manual log to crash reporting with `logException(Error/Exception exception, Stacktrace stack)`
 - Add user info to crash reporting with `setUserInfo(String identifier, String email, String name)`
 - Add general info to crash reporting with  `setInfo(String key, dyncamic value)`
 
@@ -86,4 +127,4 @@ You can bypass that limitation with the `forceCrash` parameter, instead of the r
 On iOS fatal crash has there dart stacktrace under the `Logs` tab of Crashlytics, that's a limitation of iOS that prevent developers to set a custom stacktrace to an exception. 
 
 ## Contribution
-We love contributions! Don't hesitate to open issues and make pull request to help improve this plugin 
+We love contributions! Don't hesitate to open issues and make pull request to help improve this plugin.
